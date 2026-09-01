@@ -69,4 +69,25 @@ tier as an informal spaced-repetition gate.
 npm install
 npm run dev      # local dev server
 npm run build    # single-file dist/index.html
+npm run deploy   # build first, then run this — pushes dist/ to gh-pages branch
 ```
+
+## Hosting — GitHub Pages, not Drive
+
+**Live PWA:** https://nikrupe-debug.github.io/path-for-wisdom/
+**Repo:** https://github.com/nikrupe-debug/path-for-wisdom (public — required for free Pages)
+
+Unlike Rulers of Wasteland (shared as a Drive file link), this is a real installable
+PWA (manifest + offline service worker), which needs to be served from a real origin
+— a Drive file-preview page can't host a service worker. GitHub Pages was the
+zero-cost option that didn't need a paid account.
+
+**To ship an update:** `npm run build && npm run deploy` — pushes the freshly built
+`dist/` to the `gh-pages` branch, which Pages serves automatically within ~30s.
+Bump `CACHE_NAME` in `public/sw.js` on any deploy you want existing installs to
+actually notice (otherwise the service worker may keep serving the old cached shell).
+
+Auth: a GitHub OAuth device-flow token for `nikrupe-debug` is saved at
+`nimrod/.github-token.json` (scope `repo`) — reuse it (or re-run
+`nimrod/github_device_auth.py` if it's expired/revoked) rather than the plain
+`gh auth login`, whose own CLI timeout is too short to complete conversationally.
