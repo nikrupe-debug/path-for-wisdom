@@ -4,10 +4,20 @@
 doesn't know English letters yet). Rescue-the-parents-from-evil-sorcerers story;
 defeating enemies requires English drills.
 
-## Status (2026-09-01)
+## Status (2026-09-02)
 
-Vertical slice working end-to-end: Boot → Story Intro → Avatar Creation → World 1
-placeholder. No real platforming/enemies/drills yet — that's next.
+Full loop working end-to-end: Boot → Story Intro → Avatar Creation → **World 1
+Level 1 (real platforming)** → Level Complete. Gravity/jump physics, a spike trap,
+a fall-through gap, a raised step platform, one enemy gating an audio→picture
+Tier-0 drill, and a goal flagpole. Colorful arcade visual pass (gradient sky,
+parallax mountains, drifting clouds). Live and installable at the GitHub Pages
+URL below. Next real step is playtesting with the actual kid before building
+World 1 Level 2.
+
+**Known gotcha (fixed, worth remembering):** Arcade Physics bodies on a
+`Container` don't auto-scale with `.setScale()` — see `playerController.ts` for
+the fix (pre-multiply body size/offset by the same scale factor) if this bites
+again on a future character/enemy.
 
 ## Stack
 
