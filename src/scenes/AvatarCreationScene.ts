@@ -221,6 +221,6 @@ export class AvatarCreationScene extends Phaser.Scene {
     this.config.name = trimmed;
     gameState.setAvatar(this.config);
     this.nameInput.style.display = "none";
-    this.scene.start("World1Placeholder");
+    this.scene.start("World1Level1");
   }
 }
