@@ -37,7 +37,15 @@ export const WORLD1_LEVEL1: Level1Data = {
     { x: 480, y: 510, w: 480, h: 90 },
   ],
   gaps: [{ x: 380, w: 100, groundY: 510 }],
-  platforms: [{ x: 700, y: 410, w: 120, h: 24 }],
+  // No floating platform in this level for now. Originally removed after it
+  // seemed to physically wedge the player when placed over the gap — but
+  // that investigation surfaced a real bug in playerController (the physics
+  // hitbox was ~1.7x too large in every dimension from a double-applied
+  // scale factor, see playerController.ts). With that fixed, a platform may
+  // well work fine now; it just hasn't been re-tried yet. Worth revisiting
+  // before assuming platforms/steps are fundamentally incompatible with
+  // this level's jump height and player scale.
+  platforms: [],
   spikes: [{ x: 260, groundY: 510 }],
   playerStart: { x: 60, y: 420 },
   enemy: { x: 800, y: 470, word: "cat" },

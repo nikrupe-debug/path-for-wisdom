@@ -6,11 +6,12 @@ import { createTouchControls } from "../game/touchControls";
 import { showDrill } from "../game/drillOverlay";
 import { gameState } from "../game/gameState";
 import { WORLD1_LEVEL1 } from "../data/levels/world1Level1";
+import { lighten, darken } from "../game/colorUtils";
 
 const GRASS = 0x6bd66b;
 const DIRT = 0x8a5a3a;
-const DIRT_DARK = 0x6e4529;
-const SPIKE_COLOR = 0xd0d0d8;
+const SPIKE_COLOR = 0xc9c9d6;
+const GROUND_Y = WORLD1_LEVEL1.groundSegments[0]?.y ?? 510;
 
 export class World1Level1Scene extends Phaser.Scene {
   private player!: PlayerController;
@@ -19,6 +20,7 @@ export class World1Level1Scene extends Phaser.Scene {
   private goalGlow!: Phaser.GameObjects.Arc;
   private hurtUntil = 0;
   private completing = false;
+  private playerShadow!: Phaser.GameObjects.Ellipse;
 
   constructor() {
     super("World1Level1");
@@ -84,6 +86,8 @@ export class World1Level1Scene extends Phaser.Scene {
     this.physics.add.existing(enemyZone, true);
 
     // ── player + touch controls ─────────────────────────────────────────
+    this.playerShadow = this.add.ellipse(level.playerStart.x, GROUND_Y + 2, 44, 12, 0x000000, 0.25).setDepth(1);
+
     const touch = createTouchControls(this);
     this.player = createPlayerController(
       this,
@@ -107,6 +111,12 @@ export class World1Level1Scene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     this.player.update(delta);
 
+    // shadow tracks the player horizontally and fades/shrinks with jump height
+    this.playerShadow.x = this.player.container.x;
+    const heightAboveGround = Phaser.Math.Clamp(GROUND_Y - this.player.container.y, 0, 160);
+    const t = 1 - heightAboveGround / 160;
+    this.playerShadow.setScale(0.5 + 0.5 * t).setAlpha(0.1 + 0.15 * t);
+
     // fell into a hole — gently respawn at level start
     if (this.player.container.y > WORLD1_LEVEL1.worldHeight + 60) {
       this.respawnPlayer();
@@ -124,32 +134,47 @@ export class World1Level1Scene extends Phaser.Scene {
 
   private drawGroundBlock(x: number, y: number, w: number, h: number, withGrass: boolean): void {
     const g = this.add.graphics().setDepth(0);
-    g.fillStyle(DIRT, 1);
+
+    // dirt body: vertical gradient (lighter near the surface, darker deep down)
+    // instead of one flat brown, plus a scatter of shaded pebbles for texture
+    g.fillGradientStyle(lighten(DIRT, 0.15), lighten(DIRT, 0.15), darken(DIRT, 0.35), darken(DIRT, 0.35), 1);
     g.fillRect(x, y, w, h);
-    g.fillStyle(DIRT_DARK, 1);
-    for (let i = 0; i < w; i += 26) {
-      g.fillRect(x + i + 4, y + 14, 14, 4);
+    let seed = x * 7 + 13;
+    const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+    for (let i = 0; i < w; i += 22) {
+      const px = x + i + 6 + rand() * 8;
+      const py = y + 12 + rand() * (h - 20);
+      const r = 3 + rand() * 2.5;
+      g.fillStyle(darken(DIRT, 0.4), 0.6);
+      g.fillCircle(px, py, r);
+      g.fillStyle(lighten(DIRT, 0.2), 0.4);
+      g.fillCircle(px - r * 0.3, py - r * 0.3, r * 0.4);
     }
+
+    // grass cap: gradient + jagged blades with a lit edge
+    const grassH = withGrass ? 12 : 8;
+    g.fillGradientStyle(lighten(GRASS, 0.25), lighten(GRASS, 0.25), darken(GRASS, 0.15), darken(GRASS, 0.15), 1);
+    g.fillRect(x, y - grassH + 4, w, grassH);
     if (withGrass) {
-      g.fillStyle(GRASS, 1);
-      g.fillRect(x, y - 8, w, 12);
-      g.fillStyle(0x4fae4f, 1);
-      for (let i = 0; i < w; i += 18) {
-        g.fillTriangle(x + i, y, x + i + 9, y - 14, x + i + 18, y);
+      for (let i = 0; i < w; i += 16) {
+        g.fillStyle(i % 32 === 0 ? lighten(GRASS, 0.35) : darken(GRASS, 0.1), 1);
+        g.fillTriangle(x + i, y, x + i + 8, y - 15, x + i + 16, y);
       }
-    } else {
-      g.fillStyle(GRASS, 1);
-      g.fillRect(x, y - 6, w, 8);
     }
-    g.lineStyle(2, 0x2b2118, 1);
+    g.lineStyle(2.5, 0x2b2118, 1);
     g.strokeRect(x, y, w, h);
+    // top highlight line right at the grass edge
+    g.lineStyle(2, lighten(GRASS, 0.5), 0.5);
+    g.lineBetween(x, y - grassH + 4, x + w, y - grassH + 4);
   }
 
   private drawSpikes(x: number, groundY: number): void {
     const g = this.add.graphics().setDepth(1);
-    g.fillStyle(SPIKE_COLOR, 1);
-    g.lineStyle(2, 0x2b2118, 1);
+    g.fillStyle(0x000000, 0.2);
+    g.fillEllipse(x, groundY + 2, 44, 8);
+    g.lineStyle(2.5, 0x2b2118, 1);
     for (const dx of [-14, 0, 14]) {
+      g.fillGradientStyle(lighten(SPIKE_COLOR, 0.3), darken(SPIKE_COLOR, 0.05), darken(SPIKE_COLOR, 0.05), darken(SPIKE_COLOR, 0.25), 1);
       g.beginPath();
       g.moveTo(x + dx - 9, groundY);
       g.lineTo(x + dx, groundY - 28);
@@ -157,19 +182,33 @@ export class World1Level1Scene extends Phaser.Scene {
       g.closePath();
       g.fillPath();
       g.strokePath();
+      g.lineStyle(2, 0xffffff, 0.5);
+      g.lineBetween(x + dx - 2, groundY - 6, x + dx, groundY - 24);
     }
   }
 
   private drawGoalFlag(x: number, y: number): Phaser.GameObjects.Container {
+    const shadow = this.add.ellipse(0, 66, 40, 10, 0x000000, 0.25);
     const g = this.add.graphics();
-    g.fillStyle(0xd4af37, 1);
-    g.fillRect(-4, -70, 8, 140);
-    g.fillStyle(0x6b6b8a, 0.5);
+    g.fillGradientStyle(lighten(0xd4af37, 0.4), lighten(0xd4af37, 0.4), darken(0xd4af37, 0.3), darken(0xd4af37, 0.3), 1);
+    g.fillRoundedRect(-4, -70, 8, 140, 3);
+    g.lineStyle(2, 0x6b4f14, 1);
+    g.strokeRoundedRect(-4, -70, 8, 140, 3);
+    g.fillStyle(0xe8c766, 1);
     g.fillCircle(0, -70, 6);
+    g.lineStyle(1.5, 0x6b4f14, 1);
+    g.strokeCircle(0, -70, 6);
+
     const flag = this.add.graphics();
-    flag.fillStyle(0x555577, 1);
+    flag.fillGradientStyle(lighten(0x6b6bab, 0.25), lighten(0x6b6bab, 0.25), darken(0x555577, 0.2), darken(0x555577, 0.2), 1);
     flag.fillTriangle(4, -70, 4, -30, 54, -50);
-    const container = this.add.container(x, y, [g, flag]).setDepth(4);
+    flag.lineStyle(2, 0x2b2118, 1);
+    flag.strokeTriangle(4, -70, 4, -30, 54, -50);
+    // a little star on the flag to make it read as a banner, not a random triangle
+    flag.fillStyle(0xffe08a, 0.9);
+    flag.fillCircle(24, -55, 4);
+
+    const container = this.add.container(x, y, [shadow, g, flag]).setDepth(4);
     return container;
   }
 
@@ -177,8 +216,11 @@ export class World1Level1Scene extends Phaser.Scene {
     if (this.time.now < this.hurtUntil) return;
     this.hurtUntil = this.time.now + 800;
     this.cameras.main.shake(150, 0.006);
-    const body = this.player.container.body as Phaser.Physics.Arcade.Body;
-    body.setVelocity(-150, -350);
+    // stunMs matters here, not just the velocity — see playerController.bounce:
+    // without suppressing input for a beat, held movement keys overwrite the
+    // knockback the very next frame and the player never actually leaves the
+    // spike's zone, causing a repeating re-trigger loop instead of a bounce-back.
+    this.player.bounce(-160, -420, 300);
     this.tweenFlash();
   }
 

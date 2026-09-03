@@ -20,6 +20,11 @@ export interface PlayerController {
   update(delta: number): void;
   freeze(): void; // stops accepting input (used while a drill overlay is open)
   unfreeze(): void;
+  // Sets velocity directly and suppresses input-driven movement for
+  // `stunMs` — without this, held-direction input overwrites velocityX
+  // again on the very next frame, cancelling any knockback instantly and
+  // letting hazards trap the player in a repeating bounce-in-place loop.
+  bounce(vx: number, vy: number, stunMs: number): void;
 }
 
 export function createPlayerController(
@@ -35,14 +40,19 @@ export function createPlayerController(
 
   scene.physics.add.existing(container);
   const body = container.body as Phaser.Physics.Arcade.Body;
-  // NOTE: Arcade Physics bodies on a Container do NOT auto-scale with the
-  // container's own .setScale() — setSize/setOffset are literal pixel values
-  // in the same space as if scale were 1. Since this container is scaled by
-  // baseScale for display, the body must be pre-multiplied by baseScale too,
-  // or the collision box ends up far smaller than the visible character
-  // (it'll look like the character sinks into the ground).
-  body.setSize(BODY_W * baseScale, BODY_H * baseScale);
-  body.setOffset((-BODY_W / 2) * baseScale, -68 * baseScale);
+  // NOTE: Arcade Physics DOES auto-scale a Container body's size/offset by
+  // the container's current .setScale() (confirmed empirically — logging
+  // body.width during play showed 162px for a setSize(56,...) call with
+  // baseScale 1.7: 56*1.7≈95, and Phaser scaled that again to 95*1.7≈162).
+  // An earlier fix here mistakenly concluded the opposite and pre-multiplied
+  // by baseScale to fix a visual "sinking into the ground" symptom — that
+  // pre-multiplication double-applies the scale, producing a hitbox nearly
+  // twice the visible character's size (mostly extending further right/up
+  // than the sprite), which triggered spikes/enemies/goals the player hadn't
+  // visually reached yet — the actual cause of a since-reported "enemies are
+  // unreachable" bug. Pass the literal, unscaled values; Phaser scales them.
+  body.setSize(BODY_W, BODY_H);
+  body.setOffset(-BODY_W / 2, -68);
   body.setCollideWorldBounds(true);
 
   const cursors = scene.input.keyboard?.createCursorKeys();
@@ -59,6 +69,7 @@ export function createPlayerController(
   let walkTimer = 0;
   let walkSign = 1;
   let legSwing = 0;
+  let stunnedUntil = 0;
 
   function squash(sx: number, sy: number, duration = 90): void {
     scene.tweens.add({
@@ -73,6 +84,10 @@ export function createPlayerController(
 
   function update(delta: number): void {
     if (frozen) return;
+    // during a knockback stun, let the imparted velocity + gravity play out
+    // undisturbed instead of reading input (which would overwrite velocityX
+    // this same frame and cancel any horizontal knockback instantly)
+    if (scene.time.now < stunnedUntil) return;
 
     const leftDown = !!cursors?.left.isDown || !!keys?.A.isDown || touch.left;
     const rightDown = !!cursors?.right.isDown || !!keys?.D.isDown || touch.right;
@@ -136,6 +151,10 @@ export function createPlayerController(
     },
     unfreeze() {
       frozen = false;
+    },
+    bounce(vx, vy, stunMs) {
+      body.setVelocity(vx, vy);
+      stunnedUntil = scene.time.now + stunMs;
     },
   };
 }
