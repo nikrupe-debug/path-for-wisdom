@@ -2,21 +2,38 @@ import Phaser from "phaser";
 import type { AvatarConfig } from "../types/avatar";
 import { SKIN_TONES, HAIR_COLORS, SHIRT_COLORS, PANTS_COLORS } from "./avatarOptions";
 
-// Procedural chibi-style avatar, drawn entirely with Phaser Graphics — no
-// external art files needed for the MVP. Swapping this out for a real
-// layered sprite sheet later only means rewriting this one function; the
-// AvatarConfig data model and every scene that consumes it stay the same.
+// Procedural side-profile avatar, drawn entirely with Phaser Graphics — no
+// external art files needed for the MVP. Faces right by default (the scene
+// flips the whole container via scaleX to face left); classic 2D-platformer
+// convention is a profile character, not a mirrored front-facing one, so the
+// head/face here are drawn asymmetrically on purpose. Swapping this out for
+// a real layered sprite sheet later only means rewriting this one function;
+// the AvatarConfig data model and every scene that consumes it stay the same.
 
 const HEAD_R = 24;
 const HEAD_Y = -46;
 const TORSO_TOP = -20;
-const TORSO_BOTTOM = 28;
-const TORSO_HALF_W = 20;
-const LEG_TOP = 28;
-const LEG_BOTTOM = 62;
+const TORSO_BOTTOM = 26;
+const TORSO_HALF_W = 18;
+const HIP_Y = TORSO_BOTTOM - 2;
+const LEG_LEN = 36;
+const LEG_W = 13;
+const SHOULDER_Y = TORSO_TOP + 6;
+const ARM_LEN = 32;
 const OUTLINE = 0x2b2118;
 
-export function drawAvatar(scene: Phaser.Scene, container: Phaser.GameObjects.Container, config: AvatarConfig): void {
+/**
+ * @param legSwing current stride angle in degrees (typically -25..25). 0 =
+ * idle standing pose. The walk cycle is driven externally (playerController)
+ * by calling this every animation tick with an alternating sign — matches
+ * the "old 2D games" chunky stepped-frame look rather than smooth easing.
+ */
+export function drawAvatar(
+  scene: Phaser.Scene,
+  container: Phaser.GameObjects.Container,
+  config: AvatarConfig,
+  legSwing = 0
+): void {
   container.removeAll(true);
 
   const skin = SKIN_TONES[config.skinToneIndex] ?? SKIN_TONES[0];
@@ -25,27 +42,13 @@ export function drawAvatar(scene: Phaser.Scene, container: Phaser.GameObjects.Co
   const pants = PANTS_COLORS[config.pantsColorIndex] ?? PANTS_COLORS[0];
 
   const g = scene.add.graphics();
+  const armSwing = -legSwing * 0.7;
 
-  // --- legs ---
-  g.fillStyle(pants, 1);
-  g.fillRoundedRect(-TORSO_HALF_W + 2, LEG_TOP, 14, LEG_BOTTOM - LEG_TOP, 4);
-  g.fillRoundedRect(TORSO_HALF_W - 16, LEG_TOP, 14, LEG_BOTTOM - LEG_TOP, 4);
-  g.lineStyle(2, OUTLINE, 1);
-  g.strokeRoundedRect(-TORSO_HALF_W + 2, LEG_TOP, 14, LEG_BOTTOM - LEG_TOP, 4);
-  g.strokeRoundedRect(TORSO_HALF_W - 16, LEG_TOP, 14, LEG_BOTTOM - LEG_TOP, 4);
+  // --- back leg (behind torso, swings opposite the front leg) ---
+  drawLimb(g, 0, HIP_Y, -legSwing, LEG_W, LEG_LEN, pants, true);
 
-  // --- shoes ---
-  g.fillStyle(0x2b2118, 1);
-  g.fillRoundedRect(-TORSO_HALF_W, LEG_BOTTOM - 4, 18, 10, 3);
-  g.fillRoundedRect(TORSO_HALF_W - 18, LEG_BOTTOM - 4, 18, 10, 3);
-
-  // --- arms (behind torso) ---
-  g.fillStyle(skin, 1);
-  g.fillRoundedRect(-TORSO_HALF_W - 10, TORSO_TOP + 4, 12, 34, 6);
-  g.fillRoundedRect(TORSO_HALF_W - 2, TORSO_TOP + 4, 12, 34, 6);
-  g.lineStyle(2, OUTLINE, 1);
-  g.strokeRoundedRect(-TORSO_HALF_W - 10, TORSO_TOP + 4, 12, 34, 6);
-  g.strokeRoundedRect(TORSO_HALF_W - 2, TORSO_TOP + 4, 12, 34, 6);
+  // --- back arm (near the rear edge of the torso, not the middle of the chest) ---
+  drawLimb(g, -TORSO_HALF_W * 0.75, SHOULDER_Y, -armSwing, 11, ARM_LEN, skin, false);
 
   // --- torso / shirt ---
   g.fillStyle(shirt, 1);
@@ -53,25 +56,65 @@ export function drawAvatar(scene: Phaser.Scene, container: Phaser.GameObjects.Co
   g.lineStyle(2, OUTLINE, 1);
   g.strokeRoundedRect(-TORSO_HALF_W, TORSO_TOP, TORSO_HALF_W * 2, TORSO_BOTTOM - TORSO_TOP, 8);
 
-  // --- head ---
+  // --- front leg + front arm (in front of torso) ---
+  drawLimb(g, 0, HIP_Y, legSwing, LEG_W, LEG_LEN, pants, true);
+  drawLimb(g, TORSO_HALF_W * 0.75, SHOULDER_Y, armSwing, 11, ARM_LEN, skin, false);
+
+  // --- head (side profile) ---
   g.fillStyle(skin, 1);
   g.fillCircle(0, HEAD_Y, HEAD_R);
   g.lineStyle(2, OUTLINE, 1);
   g.strokeCircle(0, HEAD_Y, HEAD_R);
 
-  // --- face ---
-  g.fillStyle(0x2b2118, 1);
-  g.fillCircle(-8, HEAD_Y - 2, 2.5);
-  g.fillCircle(8, HEAD_Y - 2, 2.5);
-  g.lineStyle(2, 0x2b2118, 1);
+  // nose bump on the leading (right/front) edge
+  g.fillStyle(skin, 1);
   g.beginPath();
-  g.arc(0, HEAD_Y + 4, 9, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false);
+  g.moveTo(HEAD_R * 0.82, HEAD_Y - 5);
+  g.lineTo(HEAD_R * 1.22, HEAD_Y + 1);
+  g.lineTo(HEAD_R * 0.82, HEAD_Y + 6);
+  g.closePath();
+  g.fillPath();
   g.strokePath();
 
-  // --- hair ---
+  // eye + mouth, both toward the front
+  g.fillStyle(OUTLINE, 1);
+  g.fillCircle(HEAD_R * 0.32, HEAD_Y - 6, 3);
+  g.lineStyle(2, OUTLINE, 1);
+  g.beginPath();
+  g.arc(HEAD_R * 0.25, HEAD_Y + 6, 8, Phaser.Math.DegToRad(-10), Phaser.Math.DegToRad(70), false);
+  g.strokePath();
+
+  // --- hair (covers back/top, leaves the front face wedge clear) ---
   drawHair(g, config.hairStyleIndex, hairColor);
 
   container.add(g);
+}
+
+// Draws one limb (leg or arm) as a rotated rounded rect hanging from a pivot
+// point, using Graphics' transform stack so the rotation is a true swing
+// around the joint rather than a translated shape.
+function drawLimb(
+  g: Phaser.GameObjects.Graphics,
+  pivotX: number,
+  pivotY: number,
+  angleDeg: number,
+  width: number,
+  length: number,
+  color: number,
+  isLeg: boolean
+): void {
+  g.save();
+  g.translateCanvas(pivotX, pivotY);
+  g.rotateCanvas(Phaser.Math.DegToRad(angleDeg));
+  g.fillStyle(color, 1);
+  g.lineStyle(2, OUTLINE, 1);
+  g.fillRoundedRect(-width / 2, 0, width, length, width / 2.5);
+  g.strokeRoundedRect(-width / 2, 0, width, length, width / 2.5);
+  if (isLeg) {
+    g.fillStyle(OUTLINE, 1);
+    g.fillRoundedRect(-width / 2 - 2, length - 6, width + 6, 9, 3);
+  }
+  g.restore();
 }
 
 function drawHair(g: Phaser.GameObjects.Graphics, styleIndex: number, color: number): void {
@@ -79,46 +122,49 @@ function drawHair(g: Phaser.GameObjects.Graphics, styleIndex: number, color: num
   g.fillStyle(color, 1);
   g.lineStyle(2, OUTLINE, 1);
 
+  // shared "cap" covering the back+top of the head, leaving a front-right
+  // wedge clear for the face (roughly -50°..65° stays bare)
+  const CAP_START = Phaser.Math.DegToRad(65);
+  const CAP_END = Phaser.Math.DegToRad(310);
+
   switch (style) {
     case "bald":
-      // just a small shine highlight, no hair mass
       g.fillStyle(0xffffff, 0.25);
-      g.fillCircle(-6, HEAD_Y - 10, 4);
+      g.fillCircle(-HEAD_R * 0.3, HEAD_Y - HEAD_R * 0.6, 4);
       break;
 
     case "short":
-      g.fillStyle(color, 1);
-      g.slice(0, HEAD_Y, HEAD_R + 3, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(360), false);
+      g.slice(0, HEAD_Y, HEAD_R + 3, CAP_START, CAP_END, false);
       g.fillPath();
       g.strokePath();
       break;
 
     case "curly":
-      g.fillStyle(color, 1);
       for (const [dx, dy] of [
-        [-16, -14], [-4, -20], [8, -20], [17, -13], [-8, -10], [8, -10], [0, -18],
+        [-16, -16], [-4, -22], [10, -18], [-18, -4], [-8, -8], [-16, 6],
       ]) {
-        g.fillCircle(dx, HEAD_Y + dy, 8);
+        g.fillCircle(dx, HEAD_Y + dy, 7);
       }
       break;
 
     case "long":
-      g.fillStyle(color, 1);
-      g.slice(0, HEAD_Y, HEAD_R + 3, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(360), false);
+      g.slice(0, HEAD_Y, HEAD_R + 3, CAP_START, CAP_END, false);
       g.fillPath();
-      g.fillRoundedRect(-HEAD_R - 3, HEAD_Y - 6, 10, 40, 4);
-      g.fillRoundedRect(HEAD_R - 7, HEAD_Y - 6, 10, 40, 4);
+      g.fillRoundedRect(-HEAD_R - 6, HEAD_Y - 8, 12, 46, 5);
+      g.strokeRoundedRect(-HEAD_R - 6, HEAD_Y - 8, 12, 46, 5);
       break;
 
     case "spiky":
-      g.fillStyle(color, 1);
-      for (const dx of [-16, -8, 0, 8, 16]) {
+      for (const [dx, dy] of [
+        [-14, -18], [-2, -22], [8, -20], [-20, -4],
+      ]) {
         g.beginPath();
-        g.moveTo(dx - 7, HEAD_Y - 14);
-        g.lineTo(dx + 7, HEAD_Y - 14);
-        g.lineTo(dx, HEAD_Y - 34);
+        g.moveTo(dx - 7, HEAD_Y + dy + 8);
+        g.lineTo(dx + 7, HEAD_Y + dy + 8);
+        g.lineTo(dx, HEAD_Y + dy - 12);
         g.closePath();
         g.fillPath();
+        g.strokePath();
       }
       break;
   }

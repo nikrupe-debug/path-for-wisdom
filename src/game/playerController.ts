@@ -8,9 +8,16 @@ const JUMP_VELOCITY = -560;
 const BODY_W = 56;
 const BODY_H = 128;
 
+// Walk-cycle animation: a chunky, stepped 2-pose leg swap (not a smoothly
+// eased sine wave) — matches the "old 2D games" look the character was
+// asked to have, where sprites swap between a handful of discrete frames
+// rather than animating continuously.
+const WALK_FRAME_MS = 130;
+const WALK_ANGLE = 24;
+
 export interface PlayerController {
   container: Phaser.GameObjects.Container;
-  update(): void;
+  update(delta: number): void;
   freeze(): void; // stops accepting input (used while a drill overlay is open)
   unfreeze(): void;
 }
@@ -24,7 +31,7 @@ export function createPlayerController(
   baseScale = 1.7
 ): PlayerController {
   const container = scene.add.container(x, y).setScale(baseScale);
-  drawAvatar(scene, container, avatar);
+  drawAvatar(scene, container, avatar, 0);
 
   scene.physics.add.existing(container);
   const body = container.body as Phaser.Physics.Arcade.Body;
@@ -49,6 +56,10 @@ export function createPlayerController(
   let bobTime = 0;
   let frozen = false;
 
+  let walkTimer = 0;
+  let walkSign = 1;
+  let legSwing = 0;
+
   function squash(sx: number, sy: number, duration = 90): void {
     scene.tweens.add({
       targets: container,
@@ -60,7 +71,7 @@ export function createPlayerController(
     });
   }
 
-  function update(): void {
+  function update(delta: number): void {
     if (frozen) return;
 
     const leftDown = !!cursors?.left.isDown || !!keys?.A.isDown || touch.left;
@@ -89,6 +100,24 @@ export function createPlayerController(
       container.y += Math.sin(bobTime) * 0.6;
     } else {
       bobTime = 0;
+    }
+
+    // walk cycle: swap legs on a fixed timer while actually walking on the
+    // ground; snap straight back to the idle pose the instant movement stops
+    // (no lingering mid-stride frame) and hold the current pose while airborne
+    // rather than animating mid-air.
+    if (grounded && moveDir !== 0) {
+      walkTimer += delta;
+      if (walkTimer >= WALK_FRAME_MS) {
+        walkTimer -= WALK_FRAME_MS;
+        walkSign *= -1;
+        legSwing = walkSign * WALK_ANGLE;
+        drawAvatar(scene, container, avatar, legSwing);
+      }
+    } else if (grounded && legSwing !== 0) {
+      walkTimer = 0;
+      legSwing = 0;
+      drawAvatar(scene, container, avatar, 0);
     }
 
     // flip to face the movement direction without disturbing whatever the

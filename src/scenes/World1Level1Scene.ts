@@ -104,8 +104,8 @@ export class World1Level1Scene extends Phaser.Scene {
     });
   }
 
-  update(): void {
-    this.player.update();
+  update(_time: number, delta: number): void {
+    this.player.update(delta);
 
     // fell into a hole — gently respawn at level start
     if (this.player.container.y > WORLD1_LEVEL1.worldHeight + 60) {
